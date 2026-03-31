@@ -1,0 +1,85 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# VirtualService — service-a
+#
+# Defines HTTP routing rules applied by the Envoy sidecar proxy.
+# Rules are evaluated top-to-bottom; first match wins.
+#
+# This config demonstrates:
+#   1. Path-based routing  — /v2/* is exclusively routed to subset v2
+#   2. Weighted canary     — all other traffic is split 80% v1 / 20% v2
+#   3. Retry policy        — automatic retries on transient failures
+#   4. Timeout             — per-route request timeout
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: service-a-vs
+  namespace: mesh-demo
+spec:
+  hosts:
+  - service-a
+  gateways:
+  - mesh-gateway          # Apply to ingress gateway (external traffic)
+  - mesh                  # Apply to mesh-internal sidecar traffic
+  http:
+
+  # ── Rule 1: Path-based routing (/v2/* → always v2) ──────────────────────
+  - name: "v2-path-route"
+    match:
+    - uri:
+        prefix: "/v2"
+    rewrite:
+      uri: "/"            # Strip /v2 prefix before forwarding
+    route:
+    - destination:
+        host: service-a
+        subset: v2
+      weight: 100
+    timeout: 10s
+
+  # ── Rule 2: Default weighted canary split (80% v1 / 20% v2) ────────────
+  - name: "canary-split"
+    route:
+    - destination:
+        host: service-a
+        subset: v1
+      weight: 80
+    - destination:
+        host: service-a
+        subset: v2
+      weight: 20
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 3s
+      retryOn: gateway-error,connect-failure,retriable-4xx
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# VirtualService — service-b
+#
+# Routes all internal traffic to service-b v1 subset.
+# The fault injection file (06-fault-injection.yaml) overrides this
+# temporarily when you want to test resilience.
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: service-b-vs
+  namespace: mesh-demo
+spec:
+  hosts:
+  - service-b
+  gateways:
+  - mesh
+  http:
+  - name: "service-b-default"
+    route:
+    - destination:
+        host: service-b
+        subset: v1
+      weight: 100
+    timeout: 10s
+    retries:
+      attempts: 3
+      perTryTimeout: 3s
+      retryOn: gateway-error,connect-failure,retriable-4xx

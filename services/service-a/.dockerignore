@@ -1,0 +1,10 @@
+# Git
+.git
+.gitignore
+
+# Go test and cache
+*_test.go
+*.test
+
+# Docs
+*.md

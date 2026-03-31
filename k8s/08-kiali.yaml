@@ -1,0 +1,39 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Kiali Custom Resource
+#
+# Used with the Kiali Operator to configure and deploy Kiali.
+# Install the Kiali Operator first (see README), then apply this file.
+#
+# Access Kiali after applying:
+#   kubectl port-forward svc/kiali 20001:20001 -n istio-system
+#   Open: http://localhost:20001
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: kiali.io/v1alpha1
+kind: Kiali
+metadata:
+  name: kiali
+  namespace: istio-system
+spec:
+  auth:
+    strategy: anonymous       # No login required — suitable for POC only
+                              # Use 'token' or 'openid' for production
+
+  external_services:
+    prometheus:
+      url: "http://prometheus:9090"   # Prometheus bundled with Istio demo profile
+    tracing:
+      enabled: true
+      in_cluster_url: "http://jaeger-query:16686"
+    grafana:
+      enabled: true
+      in_cluster_url: "http://grafana:3000"
+
+  deployment:
+    service_type: NodePort    # Change to ClusterIP and use port-forward for local access
+    accessible_namespaces:
+    - mesh-demo               # Namespaces Kiali will monitor
+    - istio-system
+
+  server:
+    port: 20001
+    web_root: /kiali

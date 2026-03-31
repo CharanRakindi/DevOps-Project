@@ -1,0 +1,196 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# SERVICE A — v1 Deployment
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-a-v1
+  namespace: mesh-demo
+  labels:
+    app: service-a
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-a
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: service-a
+        version: v1            # IMPORTANT: version label is used by DestinationRule subsets
+    spec:
+      containers:
+      - name: service-a
+        image: YOUR_DOCKERHUB_USERNAME/service-a:v1   # <-- replace with your Docker Hub username
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http            # Named ports are required by Istio for protocol detection
+        env:
+        - name: APP_VERSION
+          value: "v1"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          failureThreshold: 3
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# SERVICE A — v2 Deployment (canary version)
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-a-v2
+  namespace: mesh-demo
+  labels:
+    app: service-a
+    version: v2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: service-a
+      version: v2
+  template:
+    metadata:
+      labels:
+        app: service-a
+        version: v2
+    spec:
+      containers:
+      - name: service-a
+        image: YOUR_DOCKERHUB_USERNAME/service-a:v2   # <-- replace with your Docker Hub username
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: APP_VERSION
+          value: "v2"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# SERVICE A — Kubernetes Service
+# Selects ALL versions (v1 + v2). Istio VirtualService controls the split.
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-a
+  namespace: mesh-demo
+  labels:
+    app: service-a
+spec:
+  selector:
+    app: service-a            # Selects pods from both v1 and v2 deployments
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http                # Named port is required by Istio
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# SERVICE B — v1 Deployment
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: service-b-v1
+  namespace: mesh-demo
+  labels:
+    app: service-b
+    version: v1
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: service-b
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: service-b
+        version: v1
+    spec:
+      containers:
+      - name: service-b
+        image: YOUR_DOCKERHUB_USERNAME/service-b:v1   # <-- replace with your Docker Hub username
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: APP_VERSION
+          value: "v1"
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# SERVICE B — Kubernetes Service
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+metadata:
+  name: service-b
+  namespace: mesh-demo
+  labels:
+    app: service-b
+spec:
+  selector:
+    app: service-b
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http

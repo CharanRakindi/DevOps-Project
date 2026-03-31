@@ -1,0 +1,50 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Fault Injection — service-b
+#
+# USAGE:
+#   Apply:   kubectl apply  -f k8s/06-fault-injection.yaml
+#   Remove:  kubectl delete -f k8s/06-fault-injection.yaml
+#
+# This OVERRIDES the default service-b VirtualService (04-virtualservice.yaml)
+# to inject faults into service-b responses WITHOUT touching application code.
+#
+# What this config does:
+#   - 50% of requests get a 5-second artificial delay
+#   - 10% of requests get an HTTP 503 abort (simulates service crash)
+#
+# Use this to test:
+#   - How service-a handles timeouts from service-b
+#   - Whether retries in the VirtualService fire correctly
+#   - Circuit breaker behaviour under high error rates
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: service-b-vs          # Same name as 04-virtualservice.yaml — this overrides it
+  namespace: mesh-demo
+spec:
+  hosts:
+  - service-b
+  gateways:
+  - mesh
+  http:
+  - name: "fault-injection"
+    fault:
+      # ── Delay ─────────────────────────────────────────────────────────────
+      # Introduce a 5s delay for 50% of requests (simulates slow downstream)
+      delay:
+        percentage:
+          value: 50.0
+        fixedDelay: 5s
+
+      # ── Abort ─────────────────────────────────────────────────────────────
+      # Return HTTP 503 for 10% of requests (simulates service crash)
+      abort:
+        percentage:
+          value: 10.0
+        httpStatus: 503
+
+    route:
+    - destination:
+        host: service-b
+        subset: v1

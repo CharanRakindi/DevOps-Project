@@ -1,0 +1,95 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# DestinationRule — service-a
+#
+# Defines policies applied AFTER routing (post-routing).
+# This config demonstrates:
+#   1. Version subsets     — v1 and v2 matched by pod labels
+#   2. mTLS mode           — ISTIO_MUTUAL for encrypted traffic
+#   3. Connection pool     — limits concurrent connections (prevents overload)
+#   4. Circuit breaker     — outlierDetection ejects unhealthy instances
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: service-a-dr
+  namespace: mesh-demo
+spec:
+  host: service-a
+
+  trafficPolicy:
+    # ── mTLS ────────────────────────────────────────────────────────────────
+    tls:
+      mode: ISTIO_MUTUAL        # Use Istio-managed X.509 certificates for mTLS
+
+    # ── Connection Pool ──────────────────────────────────────────────────────
+    # Limits the volume of connections to prevent overloading downstream services
+    connectionPool:
+      tcp:
+        maxConnections: 100           # Max simultaneous TCP connections
+        connectTimeout: 5s
+      http:
+        http1MaxPendingRequests: 100  # Max queued HTTP/1.1 requests
+        http2MaxRequests: 1000        # Max concurrent HTTP/2 requests
+        maxRequestsPerConnection: 10  # Force new TCP conn after N requests (prevents stale conns)
+        idleTimeout: 30s
+
+    # ── Circuit Breaker (Outlier Detection) ─────────────────────────────────
+    # Automatically ejects unhealthy pod instances from the load balancing pool.
+    # An instance is ejected when it returns too many errors in the scan interval.
+    outlierDetection:
+      consecutive5xxErrors: 5     # Eject a host after 5 consecutive 5xx errors
+      interval: 10s               # How often to scan for unhealthy hosts
+      baseEjectionTime: 30s       # Minimum time a host stays ejected
+      maxEjectionPercent: 50      # Never eject more than 50% of hosts at once
+      minHealthPercent: 0         # Allow ejection even if very few hosts remain
+
+  # ── Subsets ────────────────────────────────────────────────────────────────
+  # Map subset names used in VirtualService to actual pod label selectors
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+    trafficPolicy:
+      loadBalancer:
+        simple: ROUND_ROBIN
+  - name: v2
+    labels:
+      version: v2
+    trafficPolicy:
+      loadBalancer:
+        simple: LEAST_CONN        # v2 uses least-connections load balancing
+---
+# ══════════════════════════════════════════════════════════════════════════════
+# DestinationRule — service-b
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: service-b-dr
+  namespace: mesh-demo
+spec:
+  host: service-b
+
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL
+    connectionPool:
+      tcp:
+        maxConnections: 100
+        connectTimeout: 5s
+      http:
+        http1MaxPendingRequests: 100
+        http2MaxRequests: 1000
+    outlierDetection:
+      consecutive5xxErrors: 3   # Eject faster for backend service
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+
+  subsets:
+  - name: v1
+    labels:
+      version: v1
+    trafficPolicy:
+      loadBalancer:
+        simple: ROUND_ROBIN

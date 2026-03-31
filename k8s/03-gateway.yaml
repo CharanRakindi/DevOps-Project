@@ -1,0 +1,20 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# Istio Gateway
+# Configures the Ingress Gateway to accept external HTTP traffic on port 80
+# and hand it to the VirtualService for routing decisions.
+# ══════════════════════════════════════════════════════════════════════════════
+apiVersion: networking.istio.io/v1alpha3
+kind: Gateway
+metadata:
+  name: mesh-gateway
+  namespace: mesh-demo
+spec:
+  selector:
+    istio: ingressgateway       # Targets the default Istio Ingress Gateway pod
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+    hosts:
+    - "*"                       # Accept requests for any hostname
