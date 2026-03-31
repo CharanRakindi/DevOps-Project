@@ -49,7 +49,7 @@ V1_COUNT=0
 V2_COUNT=0
 
 for i in $(seq 1 100); do
-  RESPONSE=$(curl -s "$BASE_URL/" 2>/dev/null || echo '{"version":"error"}')
+  RESPONSE=$(curl -s "$BASE_URL/api" 2>/dev/null || echo '{"version":"error"}')
   VERSION=$(echo "$RESPONSE" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
   if [ "$VERSION" = "v1" ]; then
     V1_COUNT=$((V1_COUNT + 1))
@@ -157,7 +157,7 @@ echo " To run the circuit breaker test, deploy Fortio:"
 echo "   kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/httpbin/sample-client/fortio-deploy.yaml -n mesh-demo"
 echo "   FORTIO_POD=\$(kubectl get pod -l app=fortio -n mesh-demo -o name | head -1)"
 echo "   kubectl exec \$FORTIO_POD -n mesh-demo -c fortio -- \\"
-echo "     fortio load -c 5 -qps 0 -n 200 http://service-a/"
+echo "     fortio load -c 5 -qps 0 -n 200 http://service-a/api"
 echo ""
 echo " Open Kiali to see the live service graph:"
 echo "   kubectl port-forward svc/kiali 20001:20001 -n istio-system"

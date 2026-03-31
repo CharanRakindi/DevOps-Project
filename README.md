@@ -16,6 +16,7 @@ these sidecars, giving you:
 - **Fault Injection** — inject delays and HTTP errors without touching code
 - **Strict mTLS** — all service-to-service traffic encrypted and authenticated
 - **Observability** — live service graph and health in Kiali dashboard
+- **Web Dashboard** — modern minimalist dark-themed UI with live health polling, architecture visualization, and real-time API responses
 
 ---
 
@@ -25,13 +26,17 @@ these sidecars, giving you:
 project-istio-mesh/
 ├── services/
 │   ├── service-a/
-│   │   ├── main.go                  Go Gin app — handles external traffic, calls service-b
+│   │   ├── main.go                  Go Gin app — serves dashboard + API, calls service-b
 │   │   ├── go.mod
-│   │   └── Dockerfile               Multi-stage build
+│   │   ├── Dockerfile               Multi-stage build
+│   │   └── templates/
+│   │       └── dashboard.html       Modern dark-themed mesh dashboard (embedded via go:embed)
 │   └── service-b/
-│       ├── main.go                  Go Gin app — backend, internal traffic only
+│       ├── main.go                  Go Gin app — backend dashboard + API
 │       ├── go.mod
-│       └── Dockerfile
+│       ├── Dockerfile
+│       └── templates/
+│           └── dashboard.html       Service B status page (embedded via go:embed)
 ├── k8s/
 │   ├── 01-namespace.yaml            Namespace with istio-injection=enabled
 │   ├── 02-deployments.yaml          Deployments (service-a v1+v2, service-b v1) + Services
@@ -45,6 +50,7 @@ project-istio-mesh/
 │   ├── build-and-push.sh            Build Docker images and push to Docker Hub
 │   ├── deploy.sh                    Apply all manifests to the cluster
 │   └── test.sh                      Run all verification tests
+├── Jenkinsfile                      CI/CD pipeline (build, push, deploy, test)
 └── README.md
 ```
 
@@ -279,7 +285,7 @@ kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samp
 # Run load test (5 concurrent, 200 requests)
 FORTIO_POD=$(kubectl get pod -l app=fortio -n mesh-demo -o name | head -1)
 kubectl exec $FORTIO_POD -n mesh-demo -c fortio -- \
-  fortio load -c 5 -qps 0 -n 200 http://service-a/
+  fortio load -c 5 -qps 0 -n 200 http://service-a/api
 
 # Look for Code 503 / Code 500 in output — those are circuit breaker rejections
 # In Kiali, the circuit breaker icon appears on service-a edges

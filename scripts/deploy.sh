@@ -35,7 +35,11 @@ echo "========================================"
 echo ""
 echo "[1/6] Substituting image names..."
 DEPLOY_FILE="$K8S_DIR/02-deployments.yaml"
-sed -i "s|YOUR_DOCKERHUB_USERNAME|$DOCKERHUB_USER|g" "$DEPLOY_FILE"
+if [[ "$OSTYPE" == "darwin"* ]]; then
+  sed -i '' "s|YOUR_DOCKERHUB_USERNAME|$DOCKERHUB_USER|g" "$DEPLOY_FILE"
+else
+  sed -i "s|YOUR_DOCKERHUB_USERNAME|$DOCKERHUB_USER|g" "$DEPLOY_FILE"
+fi
 echo "  Updated: $DEPLOY_FILE"
 
 # ── Apply manifests in order ──────────────────────────────────────────────────

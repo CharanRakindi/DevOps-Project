@@ -1,12 +1,17 @@
 package main
 
 import (
+	"embed"
+	"html/template"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
+
+//go:embed templates/*.html
+var templateFS embed.FS
 
 func main() {
 	version := os.Getenv("APP_VERSION")
@@ -15,6 +20,17 @@ func main() {
 	}
 
 	r := gin.Default()
+
+	// Parse embedded templates
+	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html"))
+	r.SetHTMLTemplate(tmpl)
+
+	// Dashboard — serves the modern UI at root
+	r.GET("/", func(c *gin.Context) {
+		c.HTML(http.StatusOK, "dashboard.html", gin.H{
+			"Version": version,
+		})
+	})
 
 	// Main API endpoint — consumed by service-a via internal DNS
 	r.GET("/api", func(c *gin.Context) {

@@ -1,13 +1,16 @@
 # ── Stage 1: Build ────────────────────────────────────────────────────────────
 FROM golang:1.21-alpine AS builder
 
+ARG APP_VERSION=v1
+
 WORKDIR /app
 
 # Install git (needed by some go modules)
 RUN apk add --no-cache git
 
 # Copy dependency files first to leverage Docker layer cache
-COPY go.mod go.sum ./
+COPY go.mod ./
+COPY go.sum* ./
 RUN go mod download
 
 # Copy source code
@@ -18,6 +21,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o service .
 
 # ── Stage 2: Runtime ──────────────────────────────────────────────────────────
 FROM alpine:3.18
+
+ARG APP_VERSION=v1
+ENV APP_VERSION=${APP_VERSION}
 
 # Add CA certs and timezone data
 RUN apk --no-cache add ca-certificates tzdata

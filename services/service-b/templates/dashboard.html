@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Service B Dashboard — Backend microservice in the Istio mesh">
+  <title>Service B — Mesh Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #06060b;
+      --bg-card: rgba(255, 255, 255, 0.03);
+      --bg-card-hover: rgba(255, 255, 255, 0.055);
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-medium: rgba(255, 255, 255, 0.10);
+      --text-primary: #f0f0f5;
+      --text-secondary: rgba(240, 240, 245, 0.55);
+      --text-muted: rgba(240, 240, 245, 0.35);
+      --accent-cyan: #22d3ee;
+      --accent-green: #34d399;
+      --accent-red: #f87171;
+      --gradient-hero: linear-gradient(135deg, #22d3ee 0%, #8b5cf6 100%);
+      --gradient-glow: radial-gradient(ellipse at 50% 0%, rgba(34, 211, 238, 0.12), transparent 60%);
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --duration-normal: 350ms;
+      --duration-slow: 600ms;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-font-smoothing: antialiased; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: '';
+      position: fixed;
+      top: -200px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: var(--gradient-glow);
+      pointer-events: none;
+    }
+
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      background: rgba(6, 6, 11, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+
+    .nav-brand svg { width: 22px; height: 22px; }
+
+    .status-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .container {
+      position: relative;
+      z-index: 1;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 0 32px;
+    }
+
+    .hero {
+      text-align: center;
+      padding: 96px 0 64px;
+    }
+
+    .hero-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--accent-cyan);
+      background: rgba(34, 211, 238, 0.1);
+      border: 1px solid rgba(34, 211, 238, 0.2);
+      padding: 6px 14px;
+      border-radius: 100px;
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      font-size: clamp(2.2rem, 5vw, 3.5rem);
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      background: var(--gradient-hero);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 16px;
+    }
+
+    .hero p {
+      font-size: 1rem;
+      color: var(--text-secondary);
+      max-width: 420px;
+      margin: 0 auto;
+    }
+
+    .info-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      padding: 32px;
+      margin-bottom: 24px;
+      transition: all var(--duration-normal) var(--ease-out);
+    }
+
+    .info-card:hover {
+      background: var(--bg-card-hover);
+      border-color: var(--border-medium);
+    }
+
+    .info-card h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .meta-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-subtle);
+      font-size: 0.82rem;
+    }
+
+    .meta-row:last-child { border-bottom: none; }
+    .meta-label { color: var(--text-muted); }
+
+    .meta-value {
+      font-family: var(--font-mono);
+      font-weight: 500;
+      font-size: 0.78rem;
+    }
+
+    .meta-value.healthy { color: var(--accent-green); }
+    .health-dot {
+      display: inline-block;
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--accent-green);
+      box-shadow: 0 0 6px rgba(52, 211, 153, 0.6);
+      margin-right: 6px;
+    }
+
+    .json-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .json-block h2 {
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 16px;
+    }
+
+    .json-output {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+    }
+
+    .json-key { color: var(--accent-cyan); }
+    .json-string { color: var(--accent-green); }
+    .json-brace { color: var(--text-muted); }
+
+    .footer {
+      padding: 24px 0;
+      border-top: 1px solid var(--border-subtle);
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(16px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .animate-in { animation: fade-up var(--duration-slow) var(--ease-out) both; }
+    .delay-1 { animation-delay: 100ms; }
+    .delay-2 { animation-delay: 200ms; }
+    .delay-3 { animation-delay: 300ms; }
+  </style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="nav-brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+      <line x1="12" y1="22" x2="12" y2="15.5"></line>
+      <polyline points="22 8.5 12 15.5 2 8.5"></polyline>
+    </svg>
+    Service B
+  </div>
+  <div class="status-item">
+    <span class="status-dot" id="status-health"></span>
+    Backend Service
+  </div>
+</nav>
+
+<div class="container">
+  <section class="hero animate-in">
+    <div class="hero-label">Backend · Internal Only</div>
+    <h1>Service B</h1>
+    <p>Internal backend microservice. Consumed by Service A via cluster DNS. Traffic encrypted with Istio mTLS.</p>
+  </section>
+
+  <div class="info-card animate-in delay-1">
+    <h2>Service Info</h2>
+    <div class="meta-row">
+      <span class="meta-label">Service</span>
+      <span class="meta-value">service-b</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Version</span>
+      <span class="meta-value">{{.Version}}</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Health</span>
+      <span class="meta-value healthy" id="health-status"><span class="health-dot"></span>Healthy</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Port</span>
+      <span class="meta-value">8080</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">DNS</span>
+      <span class="meta-value" style="font-size:0.68rem;">service-b.mesh-demo.svc.cluster.local</span>
+    </div>
+    <div class="meta-row">
+      <span class="meta-label">Sidecar</span>
+      <span class="meta-value healthy">Envoy Injected</span>
+    </div>
+  </div>
+
+  <div class="json-block animate-in delay-2">
+    <h2>Live /api Response</h2>
+    <div class="json-output" id="json-output">loading…</div>
+  </div>
+
+  <footer class="footer animate-in delay-3">
+    Service B · Part of mesh-demo namespace · Istio sidecar injected
+  </footer>
+</div>
+
+<script>
+(function() {
+  function formatJSON(obj) {
+    return JSON.stringify(obj, null, 2)
+      .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
+      .replace(/: "([^"]*)"/g, ': <span class="json-string">"$1"</span>')
+      .replace(/[{}]/g, '<span class="json-brace">$&</span>');
+  }
+  async function load() {
+    try {
+      const res = await fetch('/api');
+      const data = await res.json();
+      document.getElementById('json-output').innerHTML = formatJSON(data);
+    } catch(e) {
+      document.getElementById('json-output').textContent = '{ "error": "' + e.message + '" }';
+    }
+  }
+  load();
+  setInterval(load, 10000);
+})();
+</script>
+</body>
+</html>
