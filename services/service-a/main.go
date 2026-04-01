@@ -1,9 +1,7 @@
 package main
 
 import (
-	"embed"
 	"fmt"
-	"html/template"
 	"io"
 	"net/http"
 	"os"
@@ -12,29 +10,23 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:embed templates/*.html
-var templateFS embed.FS
-
 func main() {
 	version := os.Getenv("APP_VERSION")
 	if version == "" {
 		version = "v1"
 	}
 
+	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
-	// Parse embedded templates
-	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html"))
-	r.SetHTMLTemplate(tmpl)
-
-	// Dashboard — serves the modern UI at root
+	// ── Dashboard UI ─────────────────────────────────────────────────────
+	// Serves static/index.html at root. All other static assets under /static/
+	r.Static("/static", "./static")
 	r.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "dashboard.html", gin.H{
-			"Version": version,
-		})
+		c.File("./static/index.html")
 	})
 
-	// API endpoint — returns JSON identity and version
+	// ── API endpoint ─────────────────────────────────────────────────────
 	r.GET("/api", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"service":   "service-a",
@@ -44,12 +36,13 @@ func main() {
 		})
 	})
 
-	// Calls service-b via K8s cluster DNS and returns its response
+	// ── Service-to-service call ──────────────────────────────────────────
+	httpClient := &http.Client{Timeout: 10 * time.Second}
+
 	r.GET("/call-b", func(c *gin.Context) {
 		url := "http://service-b.mesh-demo.svc.cluster.local/api"
-		client := &http.Client{Timeout: 10 * time.Second}
 
-		resp, err := client.Get(url)
+		resp, err := httpClient.Get(url)
 		if err != nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{
 				"error":   fmt.Sprintf("failed to reach service-b: %v", err),
@@ -71,7 +64,7 @@ func main() {
 		c.Data(resp.StatusCode, "application/json", body)
 	})
 
-	// Health check endpoint (used by K8s liveness/readiness probes)
+	// ── Health check (K8s probes) ────────────────────────────────────────
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "healthy",
@@ -80,7 +73,7 @@ func main() {
 		})
 	})
 
-	// Version info endpoint
+	// ── Version info ─────────────────────────────────────────────────────
 	r.GET("/version", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"service": "service-a",
