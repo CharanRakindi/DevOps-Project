@@ -1,365 +1,524 @@
-# Service Mesh with Istio on Self-Managed Kubernetes
+# Istio Service Mesh — Production-Grade Microservices on Kubernetes
 
-**POC #35 · ADVANCED · Go + Gin · kubeadm · Istio · Kiali**
+A complete, production-ready implementation of an **Istio service mesh** on a self-managed Kubernetes cluster, featuring two Go microservices with automated CI/CD, canary deployments, mutual TLS, circuit breaking, fault injection, and a real-time web dashboard for mesh visualization.
 
----
-
-## What This Project Does
-
-Two Go microservices (Service A and Service B) are deployed on a self-managed
-Kubernetes cluster provisioned with kubeadm. Istio automatically injects an
-Envoy sidecar proxy into every pod. All inter-service traffic flows through
-these sidecars, giving you:
-
-- **Traffic Management** — weighted canary routing (80/20) + path-based routing
-- **Circuit Breaker** — automatic ejection of unhealthy pod instances
-- **Fault Injection** — inject delays and HTTP errors without touching code
-- **Strict mTLS** — all service-to-service traffic encrypted and authenticated
-- **Observability** — live service graph and health in Kiali dashboard
-- **Web Dashboard** — modern minimalist dark-themed UI with live health polling, architecture visualization, and real-time API responses
+> **POC #35 — Advanced DevOps Implementation**
 
 ---
 
-## Repository Structure
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Prerequisites](#prerequisites)
+- [Quick Start](#quick-start)
+  - [Option 1: Jenkins CI/CD (Recommended)](#option-1-jenkins-cicd-recommended)
+  - [Option 2: Manual Deployment](#option-2-manual-deployment)
+- [Microservices](#microservices)
+  - [Service A — Frontend Gateway](#service-a--frontend-gateway)
+  - [Service B — Backend API](#service-b--backend-api)
+- [Istio Configuration](#istio-configuration)
+  - [Traffic Management](#traffic-management)
+  - [Security (mTLS)](#security-mtls)
+  - [Resilience](#resilience)
+  - [Observability](#observability)
+- [Dashboard UI](#dashboard-ui)
+- [Testing](#testing)
+- [CI/CD Pipeline](#cicd-pipeline)
+- [Kubernetes Manifests Reference](#kubernetes-manifests-reference)
+- [Troubleshooting](#troubleshooting)
+
+---
+
+## Overview
+
+This project deploys two Go microservices (`service-a` and `service-b`) onto a self-managed Kubernetes cluster (kubeadm on AWS EC2) with Istio as the service mesh layer. The application itself is intentionally minimal — the real deliverable is the **infrastructure around it**: traffic splitting, encrypted service-to-service communication, automated resilience, and a fully automated Jenkins pipeline.
+
+A custom-built, dark-themed web dashboard provides real-time visualization of the mesh topology, service health, and live API responses.
+
+### What This Project Demonstrates
+
+| Capability | Implementation |
+|---|---|
+| Canary Deployments | 80% traffic → v1, 20% → v2, configurable via YAML |
+| Zero-Trust Security | Strict mutual TLS on all pod-to-pod traffic |
+| Circuit Breaking | Automatic ejection of unhealthy pods |
+| Chaos Engineering | Inject 5s delays and HTTP 503s without code changes |
+| Automated CI/CD | Jenkins pipeline: build → push → deploy → test |
+| Observability | Kiali service graph + custom real-time dashboard |
+
+---
+
+## Architecture
 
 ```
-project-istio-mesh/
-├── services/
-│   ├── service-a/
-│   │   ├── main.go                  Go Gin app — serves dashboard + API, calls service-b
-│   │   ├── go.mod
-│   │   ├── Dockerfile               Multi-stage build
-│   │   └── templates/
-│   │       └── dashboard.html       Modern dark-themed mesh dashboard (embedded via go:embed)
-│   └── service-b/
-│       ├── main.go                  Go Gin app — backend dashboard + API
-│       ├── go.mod
-│       ├── Dockerfile
-│       └── templates/
-│           └── dashboard.html       Service B status page (embedded via go:embed)
-├── k8s/
-│   ├── 01-namespace.yaml            Namespace with istio-injection=enabled
-│   ├── 02-deployments.yaml          Deployments (service-a v1+v2, service-b v1) + Services
-│   ├── 03-gateway.yaml              Istio Ingress Gateway
-│   ├── 04-virtualservice.yaml       Traffic routing rules (canary + path-based)
-│   ├── 05-destinationrule.yaml      Subsets + circuit breaker + mTLS policy
-│   ├── 06-fault-injection.yaml      Fault injection (apply/remove as needed)
-│   ├── 07-peer-authentication.yaml  Strict mTLS enforcement
-│   └── 08-kiali.yaml                Kiali custom resource (optional if using demo profile)
-├── scripts/
-│   ├── build-and-push.sh            Build Docker images and push to Docker Hub
-│   ├── deploy.sh                    Apply all manifests to the cluster
-│   └── test.sh                      Run all verification tests
-├── Jenkinsfile                      CI/CD pipeline (build, push, deploy, test)
-└── README.md
+                         ┌─────────────────────────────────┐
+                         │        Istio Ingress Gateway     │
+                         │         (Port 80 → NodePort)     │
+                         └────────────┬────────────────────┘
+                                      │
+                    ┌─────────────────┴──────────────────┐
+                    │         VirtualService Routing       │
+                    │    ┌──────────┐    ┌──────────┐     │
+                    │    │  80% v1  │    │  20% v2  │     │
+                    │    └────┬─────┘    └────┬─────┘     │
+                    └─────────┼───────────────┼───────────┘
+                              │               │
+                   ┌──────────▼──┐   ┌────────▼────┐
+                   │ Service A   │   │ Service A    │
+                   │ v1 (2 pods) │   │ v2 (1 pod)   │
+                   │ + Envoy     │   │ + Envoy      │
+                   └──────┬──────┘   └──────┬───────┘
+                          │                 │
+                          └────────┬────────┘
+                                   │ mTLS encrypted
+                          ┌────────▼────────┐
+                          │   Service B      │
+                          │  v1 (2 pods)     │
+                          │  + Envoy sidecar │
+                          └─────────────────┘
+```
+
+Every pod runs **2/2 containers**: the application container and an automatically injected **Envoy sidecar proxy**. All inter-service communication passes through the sidecar, enabling traffic control, encryption, and observability without any application code changes.
+
+---
+
+## Features
+
+### Traffic Management
+- **Weighted Canary Routing** — 80/20 traffic split between v1 and v2
+- **Path-Based Routing** — `/v2/*` routes deterministically to v2
+- **Automatic Retries** — 3 retries on gateway errors and transient failures
+- **Request Timeouts** — 10-second timeout per route
+
+### Security
+- **Strict mTLS** — All pod-to-pod traffic encrypted with Istio-managed X.509 certificates
+- **PeerAuthentication** — Plain-text connections are rejected namespace-wide
+- **Non-root containers** — All services run as unprivileged users
+
+### Resilience
+- **Circuit Breaker** — Ejects pods after 5 consecutive 5xx errors for 30 seconds
+- **Connection Pooling** — Limits concurrent TCP/HTTP connections to prevent overload
+- **Fault Injection** — Inject 5s delays (50%) and HTTP 503 aborts (10%) on demand
+
+### Observability
+- **Kiali** — Live service graph with traffic flow, error rates, and mTLS status
+- **Custom Dashboard** — Dark-themed web UI with real-time health polling and architecture visualization
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Language | Go 1.21 (standard library only, zero dependencies) |
+| Container Runtime | containerd (via kubeadm) |
+| Container Build | Docker (multi-stage, Alpine 3.18 runtime) |
+| Orchestration | Kubernetes (self-managed, kubeadm on AWS EC2) |
+| Service Mesh | Istio (demo profile) |
+| CI/CD | Jenkins (Declarative Pipeline) |
+| Registry | Docker Hub |
+| Observability | Kiali + Prometheus + Jaeger |
+| Frontend | Vanilla HTML/CSS/JS (embedded in Go binary) |
+
+---
+
+## Project Structure
+
+```
+DevOps-Project/
+│
+├── Jenkinsfile                      # Declarative CI/CD pipeline
+├── README.md                        # This file
+├── .gitignore                       # Excludes kubeconfig and sensitive files
+│
+├── k8s/                             # Kubernetes & Istio Manifests
+│   ├── 01-namespace.yaml            #   Namespace with Istio sidecar injection
+│   ├── 02-deployments.yaml          #   Deployments (A v1, A v2, B v1) + Services
+│   ├── 03-gateway.yaml              #   Istio Ingress Gateway (port 80)
+│   ├── 04-virtualservice.yaml       #   Traffic rules (canary + path-based)
+│   ├── 05-destinationrule.yaml      #   Subsets, mTLS, circuit breaker
+│   ├── 06-fault-injection.yaml      #   Chaos engineering (delay + abort)
+│   ├── 07-peer-authentication.yaml  #   Strict mTLS enforcement
+│   └── 08-kiali.yaml                #   Kiali observability dashboard
+│
+├── scripts/                         # Automation Scripts
+│   ├── build-and-push.sh            #   Manual Docker build and push
+│   ├── deploy.sh                    #   K8s deployment with image substitution
+│   └── test.sh                      #   Automated mesh verification tests
+│
+└── services/                        # Go Microservices
+    ├── service-a/                   #   Frontend Gateway Service
+    │   ├── main.go                  #     HTTP server (standard library)
+    │   ├── Dockerfile               #     Multi-stage build
+    │   ├── go.mod                   #     Module definition (zero deps)
+    │   ├── static/
+    │   │   └── index.html           #     Dashboard UI
+    │   └── .dockerignore
+    │
+    └── service-b/                   #   Internal Backend Service
+        ├── main.go                  #     HTTP server
+        ├── Dockerfile               #     Multi-stage build
+        ├── go.mod / go.sum
+        ├── templates/
+        │   └── dashboard.html       #     Service-B status page
+        └── .dockerignore
 ```
 
 ---
 
 ## Prerequisites
 
-### Infrastructure
-- 2 x Ubuntu 22.04 EC2 instances (t3.medium — 2 vCPU, 4 GB RAM minimum)
-- Both in the same VPC and security group
-- Ports open: `6443`, `10250`, `80`, `443`, `15020-15021`, `20001`, `30000-32767`
+| Requirement | Version | Purpose |
+|---|---|---|
+| Kubernetes cluster | 1.25+ | kubeadm on AWS EC2 (1 master + 2 workers) |
+| Istio | 1.20+ | `istioctl install --set profile=demo -y` |
+| Docker | 24+ | Building container images |
+| kubectl | 1.25+ | Cluster management |
+| Jenkins | 2.400+ | CI/CD pipeline execution |
+| Docker Hub account | — | Container image registry |
 
-### Tools installed locally / on control-plane node
-| Tool | Install |
-|------|---------|
-| Go 1.21+ | https://go.dev/dl/ |
-| Docker Engine | https://docs.docker.com/engine/install/ubuntu/ |
-| kubectl | https://kubernetes.io/docs/tasks/tools/ |
-| kubeadm + kubelet | via apt (see Step 1) |
-| istioctl | https://istio.io/downloadIstio |
-| Helm v3 | https://helm.sh/docs/intro/install/ |
+### Jenkins Credentials Required
 
----
-
-## Step-by-Step Setup
-
-### Step 1 — Provision the Kubernetes Cluster (kubeadm)
-
-Run on **ALL nodes**:
-
-```bash
-# Disable swap permanently
-sudo swapoff -a
-sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
-
-# Load required kernel modules
-cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf
-overlay
-br_netfilter
-EOF
-sudo modprobe overlay
-sudo modprobe br_netfilter
-
-# Required sysctl settings
-cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf
-net.bridge.bridge-nf-call-iptables  = 1
-net.bridge.bridge-nf-call-ip6tables = 1
-net.ipv4.ip_forward                 = 1
-EOF
-sudo sysctl --system
-
-# Install containerd (from Docker official repo)
-sudo apt-get update
-sudo apt-get install -y ca-certificates curl gnupg
-sudo install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
-  sudo tee /etc/apt/sources.list.d/docker.list
-sudo apt-get update
-sudo apt-get install -y containerd.io
-sudo mkdir -p /etc/containerd
-containerd config default | sudo tee /etc/containerd/config.toml
-sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
-sudo systemctl restart containerd && sudo systemctl enable containerd
-
-# Install kubeadm, kubelet, kubectl
-sudo apt-get install -y apt-transport-https ca-certificates curl gpg
-curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key | \
-  sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] \
-  https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /' | \
-  sudo tee /etc/apt/sources.list.d/kubernetes.list
-sudo apt-get update
-sudo apt-get install -y kubelet kubeadm kubectl
-sudo apt-mark hold kubelet kubeadm kubectl
-sudo systemctl enable --now kubelet
-```
-
-Run on **control plane only**:
-
-```bash
-# Initialise the cluster
-sudo kubeadm init \
-  --pod-network-cidr=10.244.0.0/16 \
-  --apiserver-advertise-address=<CONTROL_PLANE_PRIVATE_IP>
-
-# Set up kubeconfig
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
-
-# Install Flannel CNI
-kubectl apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml
-```
-
-Run on **worker node**:
-
-```bash
-# Paste the join command printed by kubeadm init
-sudo kubeadm join <CONTROL_PLANE_IP>:6443 \
-  --token <token> \
-  --discovery-token-ca-cert-hash sha256:<hash>
-```
-
-Verify on control plane:
-
-```bash
-kubectl get nodes
-# Both nodes should show STATUS = Ready within ~60 seconds
-```
+| Credential ID | Type | Description |
+|---|---|---|
+| `dockerhub-creds` | Username/Password | Docker Hub login credentials |
+| `kubeconfig-mesh-demo` | Secret File | Kubernetes kubeconfig for the cluster |
 
 ---
 
-### Step 2 — Install Istio
+## Quick Start
+
+### Option 1: Jenkins CI/CD (Recommended)
+
+1. **Create a Jenkins Pipeline job** pointing to this repository:
+   ```
+   Repository URL: https://github.com/CharanRakindi/DevOps-Project.git
+   Branch: main
+   Script Path: Jenkinsfile
+   ```
+
+2. **Configure credentials** in Jenkins (Manage Jenkins → Credentials):
+   - `dockerhub-creds` — Your Docker Hub username and password/token
+   - `kubeconfig-mesh-demo` — Your cluster's kubeconfig file
+
+3. **Run the pipeline** — it will automatically:
+   - Build 3 Docker images (service-a:v1, service-a:v2, service-b:v1)
+   - Push them to Docker Hub
+   - Deploy all Kubernetes manifests
+   - Restart pods to pull the latest images
+   - Run automated mesh verification tests
+
+4. **Access the dashboard**:
+   ```bash
+   # Get the NodePort
+   kubectl get svc istio-ingressgateway -n istio-system
+   # Open in browser
+   http://<NODE_EXTERNAL_IP>:<HTTP_NODEPORT>/
+   ```
+
+### Option 2: Manual Deployment
 
 ```bash
-# Download istioctl
-curl -L https://istio.io/downloadIstio | sh -
-cd istio-*
-export PATH=$PWD/bin:$PATH
-echo 'export PATH=$HOME/istio-*/bin:$PATH' >> ~/.bashrc
-
-# Pre-flight check
-istioctl x precheck
-
-# Install with demo profile (includes Prometheus, Kiali, Jaeger, Grafana)
-istioctl install --set profile=demo -y
-
-# Verify all Istio pods are Running
-kubectl get pods -n istio-system
-```
-
----
-
-### Step 3 — Build & Push Docker Images
-
-```bash
+# 1. Build and push Docker images
 chmod +x scripts/build-and-push.sh
 ./scripts/build-and-push.sh <YOUR_DOCKERHUB_USERNAME>
-```
 
-This builds:
-- `<user>/service-a:v1` and `<user>/service-a:v2`
-- `<user>/service-b:v1`
-
----
-
-### Step 4 — Deploy to Kubernetes
-
-```bash
+# 2. Deploy to Kubernetes
 chmod +x scripts/deploy.sh
 ./scripts/deploy.sh <YOUR_DOCKERHUB_USERNAME>
-```
 
-This applies all manifests in order (01 → 07) and waits for rollouts.
-
-**Expected pod status** — all pods should show `2/2 READY` (app + Envoy sidecar):
-
-```
-NAME                         READY   STATUS    RESTARTS
-service-a-v1-xxxxx           2/2     Running   0
-service-a-v1-yyyyy           2/2     Running   0
-service-a-v2-xxxxx           2/2     Running   0
-service-b-v1-xxxxx           2/2     Running   0
-service-b-v1-yyyyy           2/2     Running   0
-```
-
-> **If pods show `1/2`** — sidecar was not injected. Check:
-> ```bash
-> kubectl get namespace mesh-demo --show-labels
-> # Must show: istio-injection=enabled
-> ```
-
----
-
-### Step 5 — Open Kiali Dashboard
-
-```bash
-# Port-forward Kiali to your local machine
-kubectl port-forward svc/kiali 20001:20001 -n istio-system
-
-# Open in browser
-http://localhost:20001
-```
-
-In Kiali, navigate to **Graph → Namespace: mesh-demo** to see the live service
-topology with animated traffic, mTLS lock icons, and health indicators.
-
----
-
-### Step 6 — Run Tests
-
-```bash
+# 3. Run tests
 chmod +x scripts/test.sh
 ./scripts/test.sh
 ```
 
-Tests run automatically:
-1. Weighted routing — 100 requests, counts v1 vs v2 responses
-2. Path routing — `/v2/` always hits v2
-3. Internal call — service-a → service-b via cluster DNS
-4. mTLS check — via `istioctl authn tls-check`
-5. Fault injection — applies + tests + removes automatically
+---
+
+## Microservices
+
+### Service A — Frontend Gateway
+
+The primary user-facing service. Serves the dashboard UI and acts as an API gateway.
+
+| Endpoint | Method | Response |
+|---|---|---|
+| `/` | GET | Dashboard HTML UI |
+| `/api` | GET | `{"service":"service-a", "version":"v1", "message":"Hello from Service A", "timestamp":"..."}` |
+| `/health` | GET | `{"status":"healthy", "service":"service-a", "version":"v1"}` |
+| `/version` | GET | `{"service":"service-a", "version":"v1"}` |
+| `/call-b` | GET | Proxied JSON response from Service B (via K8s DNS) |
+
+**Implementation details:**
+- Written in Go using only the standard library (`net/http`, `encoding/json`)
+- Zero external dependencies — no frameworks
+- Uses `http.FileServer` to serve `static/index.html` at the root path
+- `http.ServeMux` matches API routes (`/api`, `/health`, etc.) before the static fallback (`/`)
+- Reuses a single `http.Client` for `/call-b` to enable connection pooling
+- Runs on port 8080 inside the container
+
+**Versions deployed:**
+- `v1` — Primary (2 replicas, receives 80% of traffic)
+- `v2` — Canary (1 replica, receives 20% of traffic)
+
+### Service B — Backend API
+
+Internal backend service consumed by Service A via Kubernetes cluster DNS.
+
+| Endpoint | Method | Response |
+|---|---|---|
+| `/` | GET | Service B status page (HTML) |
+| `/api` | GET | `{"service":"service-b", "version":"v1", "message":"Hello from Service B"}` |
+| `/health` | GET | `{"status":"healthy", "service":"service-b", "version":"v1"}` |
+
+**Implementation details:**
+- Built with Go and the Gin framework
+- Accessible only inside the mesh (not exposed via Ingress Gateway)
+- Called by Service A at `http://service-b.mesh-demo.svc.cluster.local/api`
 
 ---
 
-## Fault Injection (Manual)
+## Istio Configuration
 
-Apply:
-```bash
-kubectl apply -f k8s/06-fault-injection.yaml
+### Traffic Management
+
+**VirtualService** (`04-virtualservice.yaml`):
+
+```yaml
+# Rule 1: Path-based routing — /v2/* always goes to v2
+- match:
+  - uri:
+      prefix: "/v2"
+  rewrite:
+    uri: "/"
+  route:
+  - destination:
+      host: service-a
+      subset: v2
+
+# Rule 2: Default canary split
+- route:
+  - destination:
+      host: service-a
+      subset: v1
+    weight: 80
+  - destination:
+      host: service-a
+      subset: v2
+    weight: 20
 ```
 
-This makes service-b return:
-- 5-second delay for 50% of requests
-- HTTP 503 for 10% of requests
+**DestinationRule** (`05-destinationrule.yaml`):
 
-Remove when done:
+```yaml
+subsets:
+- name: v1
+  labels:
+    version: v1
+  trafficPolicy:
+    loadBalancer:
+      simple: ROUND_ROBIN
+- name: v2
+  labels:
+    version: v2
+  trafficPolicy:
+    loadBalancer:
+      simple: LEAST_CONN
+```
+
+### Security (mTLS)
+
+**PeerAuthentication** (`07-peer-authentication.yaml`):
+
+```yaml
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: default
+  namespace: mesh-demo
+spec:
+  mtls:
+    mode: STRICT    # Rejects all plain-text connections
+```
+
+All traffic between services is encrypted using Istio-managed X.509 certificates. The `ISTIO_MUTUAL` TLS mode in the DestinationRule ensures both sides present valid certificates.
+
+### Resilience
+
+**Circuit Breaker** (in `05-destinationrule.yaml`):
+
+```yaml
+outlierDetection:
+  consecutive5xxErrors: 5     # Eject after 5 consecutive 5xx
+  interval: 10s               # Scan every 10 seconds
+  baseEjectionTime: 30s       # Ejected for at least 30 seconds
+  maxEjectionPercent: 50      # Never eject more than 50% of pods
+
+connectionPool:
+  tcp:
+    maxConnections: 100
+  http:
+    http1MaxPendingRequests: 100
+    http2MaxRequests: 1000
+```
+
+**Fault Injection** (`06-fault-injection.yaml`):
+
 ```bash
+# Apply fault injection (50% delays, 10% HTTP 503s)
+kubectl apply -f k8s/06-fault-injection.yaml
+
+# Remove fault injection
 kubectl delete -f k8s/06-fault-injection.yaml
 ```
 
----
+This overrides the Service B VirtualService to inject:
+- **5-second delays** on 50% of requests (simulates slow downstream)
+- **HTTP 503 aborts** on 10% of requests (simulates service crash)
 
-## Circuit Breaker Test (Manual)
+### Observability
+
+**Kiali** (`08-kiali.yaml`):
 
 ```bash
-# Deploy Fortio load tester
+# Access Kiali dashboard
+kubectl port-forward svc/kiali 20001:20001 -n istio-system
+# Open: http://localhost:20001
+```
+
+Kiali provides a live service graph showing:
+- Real-time traffic flow between services
+- Request success/error rates
+- mTLS lock icons on encrypted edges
+- Response time metrics
+
+---
+
+## Dashboard UI
+
+The custom-built dashboard is served at the root path (`/`) of Service A and provides:
+
+| Section | Description |
+|---|---|
+| **Navigation Bar** | Live status indicators for Kubernetes, Istio, and mTLS connectivity |
+| **Service Cards** | Health status, replica count, traffic weight, and port for each service |
+| **Architecture Flow** | Animated visualization of traffic flow from Ingress → Service A → Service B |
+| **Mesh Configuration** | mTLS mode, traffic split ratio, circuit breaker status, total pod count |
+| **Istio Capabilities** | Cards explaining Traffic Management, mTLS, Fault Injection, Circuit Breaking |
+| **Live Responses** | Tabbed panel polling `/api`, `/health`, `/version`, and `/call-b` in real time |
+
+**Design:** Dark theme, glassmorphism, Inter + JetBrains Mono fonts, purple/cyan gradient accents, smooth CSS animations.
+
+---
+
+## Testing
+
+The automated test suite (`scripts/test.sh`) validates 5 mesh capabilities:
+
+| Test | What It Verifies | Pass Criteria |
+|---|---|---|
+| 1. Weighted Routing | 100 requests → check v1/v2 distribution | ~80 v1, ~20 v2 |
+| 2. Path-Based Routing | 10 requests to `/v2/` | All 10 return v2 |
+| 3. Internal Call | 5 requests to `/call-b` | ≥4 return HTTP 200 |
+| 4. mTLS Status | `istioctl authn tls-check` | All connections show mTLS |
+| 5. Fault Injection | Apply faults, send 20 requests, verify delays/aborts, cleanup | ~10 delayed, ~2 aborted |
+
+**Circuit breaker test** (manual, using Fortio):
+
+```bash
 kubectl apply -f https://raw.githubusercontent.com/istio/istio/release-1.20/samples/httpbin/sample-client/fortio-deploy.yaml -n mesh-demo
 
-# Run load test (5 concurrent, 200 requests)
 FORTIO_POD=$(kubectl get pod -l app=fortio -n mesh-demo -o name | head -1)
+
 kubectl exec $FORTIO_POD -n mesh-demo -c fortio -- \
   fortio load -c 5 -qps 0 -n 200 http://service-a/api
-
-# Look for Code 503 / Code 500 in output — those are circuit breaker rejections
-# In Kiali, the circuit breaker icon appears on service-a edges
 ```
 
 ---
 
-## Access All Dashboards
+## CI/CD Pipeline
 
+The Jenkins pipeline (`Jenkinsfile`) runs 4 stages:
+
+```
+┌───────────┐    ┌───────────────────┐    ┌─────────────────┐    ┌──────────────┐
+│ Preflight │ →  │ Build & Push      │ →  │ Deploy to K8s   │ →  │ Mesh Tests   │
+│           │    │ Images            │    │                 │    │              │
+│ • docker  │    │ • service-a:v1    │    │ • Apply YAMLs   │    │ • Canary     │
+│ • kubectl │    │ • service-a:v2    │    │ • Rollout       │    │ • Path-based │
+│ • scripts │    │ • service-b:v1    │    │   restart       │    │ • mTLS       │
+│           │    │ • Push to Hub     │    │ • Wait for      │    │ • Faults     │
+│           │    │                   │    │   readiness     │    │              │
+└───────────┘    └───────────────────┘    └─────────────────┘    └──────────────┘
+```
+
+**Pipeline parameters:**
+- `DEPLOY_TO_K8S` (default: true) — Skip deployment if you only want to build images
+- `RUN_TESTS` (default: true) — Skip tests for faster iteration
+
+---
+
+## Kubernetes Manifests Reference
+
+| File | Resource | Purpose |
+|---|---|---|
+| `01-namespace.yaml` | Namespace | `mesh-demo` with `istio-injection: enabled` |
+| `02-deployments.yaml` | Deployment × 3, Service × 2 | Pods for A-v1, A-v2, B-v1 + ClusterIP services |
+| `03-gateway.yaml` | Gateway | Istio Ingress Gateway accepting HTTP on port 80 |
+| `04-virtualservice.yaml` | VirtualService × 2 | Canary routing (A) + default routing (B) |
+| `05-destinationrule.yaml` | DestinationRule × 2 | Subsets, mTLS, circuit breaker, connection pools |
+| `06-fault-injection.yaml` | VirtualService | Overrides B routing with delay + abort faults |
+| `07-peer-authentication.yaml` | PeerAuthentication | Enforces STRICT mTLS namespace-wide |
+| `08-kiali.yaml` | Kiali CR | Configures Kiali with Prometheus, Jaeger, Grafana |
+
+---
+
+## Troubleshooting
+
+### Pods stuck at 1/2 READY
+Istio sidecar injection may not be working. Verify the namespace label:
 ```bash
-# Kiali (service mesh graph)
-kubectl port-forward svc/kiali       20001:20001 -n istio-system
-
-# Prometheus (metrics)
-kubectl port-forward svc/prometheus  9090:9090   -n istio-system
-
-# Jaeger (distributed tracing)
-kubectl port-forward svc/jaeger-query 16686:16686 -n istio-system
-
-# Grafana (metrics dashboards)
-kubectl port-forward svc/grafana     3000:3000   -n istio-system
+kubectl get namespace mesh-demo --show-labels
+# Should include: istio-injection=enabled
 ```
 
----
+### Dashboard shows "Unreachable"
+You are accessing the HTML file directly (`file:///...`). The dashboard only works when served through the Go backend inside the cluster. Access via `http://<NODE_IP>:<NODEPORT>/`.
 
-## Useful Commands
-
+### `/api` returns 404
+The pods may be running a stale image. Force a restart:
 ```bash
-# Check pod status (must be 2/2)
-kubectl get pods -n mesh-demo
-
-# Validate all Istio config
-istioctl analyze -n mesh-demo
-
-# Check mTLS status
-istioctl authn tls-check -n mesh-demo
-
-# View Envoy sidecar logs for a pod
-kubectl logs <pod-name> -c istio-proxy -n mesh-demo
-
-# Inspect Envoy routing config
-istioctl proxy-config route <pod-name>.mesh-demo
-istioctl proxy-config cluster <pod-name>.mesh-demo
-
-# Describe VirtualService
-kubectl describe virtualservice service-a-vs -n mesh-demo
-
-# Describe DestinationRule
-kubectl describe destinationrule service-a-dr -n mesh-demo
+kubectl rollout restart deployment/service-a-v1 deployment/service-a-v2 -n mesh-demo
 ```
 
----
-
-## Cleanup
-
+### Test script shows HTTP 000
+The `test.sh` script cannot determine the node IP. Run manually:
 ```bash
-# Remove all application resources
-kubectl delete namespace mesh-demo
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+NODEPORT=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
+curl http://$NODE_IP:$NODEPORT/api
+```
 
-# Uninstall Istio completely
-istioctl uninstall --purge -y
-kubectl delete namespace istio-system
+### Jenkins: "Waiting for next available executor"
+Set executor count on the built-in node:
+**Manage Jenkins → Nodes → Built-In Node → Configure → Number of executors → 2**
 
-# Tear down the cluster (run on each node)
-sudo kubeadm reset -f
-sudo rm -rf $HOME/.kube /etc/cni /etc/kubernetes
+### Jenkins: "permission denied" on Docker
+Add the Jenkins user to the Docker group:
+```bash
+sudo usermod -aG docker jenkins
+sudo systemctl restart jenkins
 ```
 
 ---
 
-## References
+## License
 
-- Istio Docs: https://istio.io/latest/docs/
-- kubeadm Setup: https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/
-- Gin Framework: https://gin-gonic.com/docs/
-- Kiali Docs: https://kiali.io/docs/
-- Flannel CNI: https://github.com/flannel-io/flannel
+This project is part of an academic/professional DevOps portfolio demonstration.
+
+---
+
+**Built by [Charan Rakindi](https://github.com/CharanRakindi)**
