@@ -64,6 +64,13 @@ echo ""
 echo "[6/6] Enforcing strict mTLS..."
 kubectl apply -f "$K8S_DIR/07-peer-authentication.yaml"
 
+# ── Force pods to pull latest images ─────────────────────────────────────────
+echo ""
+echo "Restarting deployments to pull latest images..."
+kubectl rollout restart deployment/service-a-v1 -n mesh-demo
+kubectl rollout restart deployment/service-a-v2 -n mesh-demo
+kubectl rollout restart deployment/service-b-v1 -n mesh-demo
+
 # ── Wait for rollout ──────────────────────────────────────────────────────────
 echo ""
 echo "Waiting for deployments to roll out..."
