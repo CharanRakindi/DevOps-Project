@@ -1,13 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"time"
-
-	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -16,19 +16,21 @@ func main() {
 		version = "v1"
 	}
 
-	gin.SetMode(gin.ReleaseMode)
-	r := gin.Default()
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
-	// ── Dashboard UI ─────────────────────────────────────────────────────
-	// Serves static/index.html at root. All other static assets under /static/
-	r.Static("/static", "./static")
-	r.GET("/", func(c *gin.Context) {
-		c.File("./static/index.html")
-	})
+	// Reuse a single HTTP client for connection pooling
+	httpClient := &http.Client{Timeout: 10 * time.Second}
 
-	// ── API endpoint ─────────────────────────────────────────────────────
-	r.GET("/api", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
+	mux := http.NewServeMux()
+
+	// ── API routes registered BEFORE the static handler ──────────────────
+
+	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
 			"service":   "service-a",
 			"version":   version,
 			"message":   "Hello from Service A",
@@ -36,15 +38,31 @@ func main() {
 		})
 	})
 
-	// ── Service-to-service call ──────────────────────────────────────────
-	httpClient := &http.Client{Timeout: 10 * time.Second}
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"status":  "healthy",
+			"service": "service-a",
+			"version": version,
+		})
+	})
 
-	r.GET("/call-b", func(c *gin.Context) {
+	mux.HandleFunc("/version", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"service": "service-a",
+			"version": version,
+		})
+	})
+
+	mux.HandleFunc("/call-b", func(w http.ResponseWriter, r *http.Request) {
 		url := "http://service-b.mesh-demo.svc.cluster.local/api"
 
 		resp, err := httpClient.Get(url)
 		if err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			json.NewEncoder(w).Encode(map[string]string{
 				"error":   fmt.Sprintf("failed to reach service-b: %v", err),
 				"service": "service-a",
 				"version": version,
@@ -55,36 +73,25 @@ func main() {
 
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(map[string]string{
 				"error": "failed to read response from service-b",
 			})
 			return
 		}
 
-		c.Data(resp.StatusCode, "application/json", body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(resp.StatusCode)
+		w.Write(body)
 	})
 
-	// ── Health check (K8s probes) ────────────────────────────────────────
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "healthy",
-			"service": "service-a",
-			"version": version,
-		})
-	})
+	// ── Static file server ───────────────────────────────────────────────
+	// http.FileServer automatically serves index.html for directory requests
+	// so GET / will serve ./static/index.html
+	fs := http.FileServer(http.Dir("./static"))
+	mux.Handle("/", fs)
 
-	// ── Version info ─────────────────────────────────────────────────────
-	r.GET("/version", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"service": "service-a",
-			"version": version,
-		})
-	})
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	r.Run(":" + port)
+	log.Printf("service-a %s listening on :%s", version, port)
+	log.Fatal(http.ListenAndServe(":"+port, mux))
 }
