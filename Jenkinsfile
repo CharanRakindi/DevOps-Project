@@ -26,7 +26,8 @@ pipeline {
     stage('Preflight') {
       steps {
         sh '''
-          set -euo pipefail
+          #!/bin/bash
+          set -eu
           command -v docker >/dev/null
           command -v kubectl >/dev/null
           test -f scripts/deploy.sh
@@ -40,6 +41,7 @@ pipeline {
       steps {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
           sh '''
+            #!/bin/bash
             set -euo pipefail
 
             echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
@@ -68,7 +70,8 @@ pipeline {
           file(credentialsId: 'kubeconfig-mesh-demo', variable: 'KUBECONFIG_FILE')
         ]) {
           sh '''
-            set -euo pipefail
+            #!/bin/bash
+            set -eu
             export KUBECONFIG="$KUBECONFIG_FILE"
 
             chmod +x scripts/deploy.sh
@@ -88,7 +91,8 @@ pipeline {
       steps {
         withCredentials([file(credentialsId: 'kubeconfig-mesh-demo', variable: 'KUBECONFIG_FILE')]) {
           sh '''
-            set -euo pipefail
+            #!/bin/bash
+            set -eu
             export KUBECONFIG="$KUBECONFIG_FILE"
 
             chmod +x scripts/test.sh
