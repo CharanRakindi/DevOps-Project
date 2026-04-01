@@ -42,7 +42,7 @@ pipeline {
         withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
           sh '''
             #!/bin/bash
-            set -euo pipefail
+            set -eu
 
             echo "$DH_PASS" | docker login -u "$DH_USER" --password-stdin
 
