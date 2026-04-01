@@ -18,6 +18,7 @@ metadata:
 spec:
   hosts:
   - service-a
+  - "*"
   gateways:
   - mesh-gateway          # Apply to ingress gateway (external traffic)
   - mesh                  # Apply to mesh-internal sidecar traffic
