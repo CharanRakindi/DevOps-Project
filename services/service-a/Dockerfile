@@ -10,7 +10,6 @@ RUN apk add --no-cache git
 
 # Copy dependency files first to leverage Docker layer cache
 COPY go.mod ./
-COPY go.sum* ./
 RUN go mod download
 
 # Copy source code
