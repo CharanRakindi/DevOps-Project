@@ -32,9 +32,6 @@ WORKDIR /app
 # Copy compiled binary
 COPY --from=builder /app/service .
 
-# Copy static dashboard files
-COPY --from=builder /app/static ./static
-
 # Run as non-root user (K8s best practice)
 RUN adduser -D -g '' appuser
 USER appuser

@@ -29,7 +29,7 @@ spec:
         - containerPort: 8080
           name: http            # Named ports are required by Istio for protocol detection
         env:
-        - name: APP_VERSION
+        - name: VERSION
           value: "v1"
         readinessProbe:
           httpGet:
@@ -83,7 +83,7 @@ spec:
         - containerPort: 8080
           name: http
         env:
-        - name: APP_VERSION
+        - name: VERSION
           value: "v2"
         readinessProbe:
           httpGet:
@@ -155,7 +155,7 @@ spec:
         - containerPort: 8080
           name: http
         env:
-        - name: APP_VERSION
+        - name: VERSION
           value: "v1"
         readinessProbe:
           httpGet:

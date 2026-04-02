@@ -11,7 +11,7 @@ import (
 )
 
 func main() {
-	version := os.Getenv("APP_VERSION")
+	version := os.Getenv("VERSION")
 	if version == "" {
 		version = "v1"
 	}
@@ -30,11 +30,13 @@ func main() {
 
 	mux.HandleFunc("/api", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		loc, _ := time.LoadLocation("Asia/Kolkata")
+		timestamp := time.Now().In(loc).Format(time.RFC3339)
 		json.NewEncoder(w).Encode(map[string]string{
 			"service":   "service-a",
 			"version":   version,
 			"message":   "Hello from Service A",
-			"timestamp": time.Now().Format(time.RFC3339),
+			"timestamp": timestamp,
 		})
 	})
 
@@ -86,11 +88,15 @@ func main() {
 		w.Write(body)
 	})
 
-	// ── Static file server ───────────────────────────────────────────────
-	// http.FileServer automatically serves index.html for directory requests
-	// so GET / will serve ./static/index.html
-	fs := http.FileServer(http.Dir("./static"))
-	mux.Handle("/", fs)
+	// ── Root route ────────────────────────────────────────────────────────
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{
+			"service": "service-a",
+			"version": version,
+			"message": "API-only backend. Use /api, /health, /version, or /call-b.",
+		})
+	})
 
 	log.Printf("service-a %s listening on :%s", version, port)
 	log.Fatal(http.ListenAndServe(":"+port, mux))
