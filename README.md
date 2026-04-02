@@ -1,4 +1,4 @@
-# Istio Service Mesh — Production-Grade Microservices on Kubernetes
+# Istio Service Mesh — Microservices on Kubernetes
 
 A complete, production-ready implementation of an **Istio service mesh** on a self-managed Kubernetes cluster, featuring two Go microservices with automated CI/CD, canary deployments, mutual TLS, circuit breaking, fault injection, and a real-time web dashboard for mesh visualization.
 
