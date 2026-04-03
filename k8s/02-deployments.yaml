@@ -3,9 +3,6 @@ kind: Deployment
 metadata:
   name: service-a-v1
   namespace: mesh-demo
-  labels:
-    app: service-a
-    version: v1
 spec:
   replicas: 1
   selector:
@@ -20,31 +17,19 @@ spec:
     spec:
       containers:
       - name: service-a
-        image: charanseven/service-a:latest
-        imagePullPolicy: Always
+        image: ${DOCKERHUB_USER}/service-a:latest
         ports:
         - containerPort: 8080
-          name: http
         env:
         - name: VERSION
           value: "v1"
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: service-a-v2
   namespace: mesh-demo
-  labels:
-    app: service-a
-    version: v2
 spec:
   replicas: 1
   selector:
@@ -59,22 +44,13 @@ spec:
     spec:
       containers:
       - name: service-a
-        image: charanseven/service-a:latest
-        imagePullPolicy: Always
+        image: ${DOCKERHUB_USER}/service-a:latest
         ports:
         - containerPort: 8080
-          name: http
         env:
         - name: VERSION
           value: "v2"
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
+
 ---
 apiVersion: v1
 kind: Service
@@ -87,16 +63,13 @@ spec:
   ports:
   - port: 80
     targetPort: 8080
-    name: http
+
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: service-b-v1
   namespace: mesh-demo
-  labels:
-    app: service-b
-    version: v1
 spec:
   replicas: 1
   selector:
@@ -111,22 +84,13 @@ spec:
     spec:
       containers:
       - name: service-b
-        image: charanseven/service-b:latest
-        imagePullPolicy: Always
+        image: ${DOCKERHUB_USER}/service-b:latest
         ports:
         - containerPort: 8080
-          name: http
         env:
         - name: VERSION
           value: "v1"
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
+
 ---
 apiVersion: v1
 kind: Service
@@ -139,4 +103,3 @@ spec:
   ports:
   - port: 80
     targetPort: 8080
-    name: http

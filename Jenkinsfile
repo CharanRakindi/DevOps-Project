@@ -4,7 +4,6 @@ pipeline {
   environment {
     SERVICE_A_PATH = 'services/service-a'
     SERVICE_B_PATH = 'services/service-b'
-    ELASTIC_IP = '16.112.134.36'
   }
 
   stages {
@@ -36,11 +35,17 @@ pipeline {
     stage('Deploy') {
       steps {
         withCredentials([
-          file(credentialsId: 'kubeconfig-mesh-demo', variable: 'KUBECONFIG_FILE')
+          file(credentialsId: 'kubeconfig-mesh-demo', variable: 'KUBECONFIG_FILE'),
+          usernamePassword(
+            credentialsId: 'dockerhub-creds',
+            usernameVariable: 'DH_USER',
+            passwordVariable: 'DH_PASS'
+          )
         ]) {
           sh '''
             export KUBECONFIG="$KUBECONFIG_FILE"
-            kubectl apply -f k8s/
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh $DH_USER
           '''
         }
       }
@@ -53,6 +58,7 @@ pipeline {
         ]) {
           sh '''
             export KUBECONFIG="$KUBECONFIG_FILE"
+            export ELASTIC_IP=${ELASTIC_IP}
             chmod +x scripts/test.sh
             ./scripts/test.sh
           '''
