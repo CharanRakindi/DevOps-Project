@@ -13,15 +13,18 @@ spec:
   - match:
     - uri:
         prefix: "/v2"
+    rewrite:
+      uri: "/"   # ✅ FIX
     route:
     - destination:
         host: service-a
         subset: v2
-      weight: 100
 
   - match:
     - uri:
         prefix: "/api"
+    rewrite:
+      uri: "/"   # ✅ FIX
     route:
     - destination:
         host: service-a
@@ -32,7 +35,9 @@ spec:
         subset: v2
       weight: 20
 
-  - route:
+  - rewrite:
+      uri: "/"   # optional but safe
+    route:
     - destination:
         host: service-a
         subset: v1
