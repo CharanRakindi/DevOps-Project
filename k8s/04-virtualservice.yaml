@@ -5,7 +5,7 @@ metadata:
   namespace: mesh-demo
 spec:
   hosts:
-  - service-a
+  - "*"
   gateways:
   - mesh-gateway
 
