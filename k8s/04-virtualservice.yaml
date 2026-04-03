@@ -11,7 +11,7 @@ spec:
 
   http:
 
-  # 🔥 RULE 1 (TOP PRIORITY)
+  # 🔥 RULE 1 — MUST BE FIRST
   - match:
     - uri:
         prefix: "/v2"
@@ -22,11 +22,8 @@ spec:
         host: service-a
         subset: v2
 
-  # 🔥 RULE 2 (DEFAULT)
-  - match:
-    - uri:
-        prefix: "/"
-    route:
+  # 🔥 RULE 2 — DEFAULT
+  - route:
     - destination:
         host: service-a
         subset: v1
