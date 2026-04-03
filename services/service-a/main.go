@@ -16,7 +16,7 @@ func main() {
 
 	r := gin.Default()
 
-	// ✅ MAIN API
+	// ✅ MAIN API (single source of truth)
 	r.GET("/api", func(c *gin.Context) {
 		resp, err := http.Get("http://service-b/api")
 
@@ -33,40 +33,26 @@ func main() {
 		c.JSON(200, gin.H{
 			"message":   "Hello from Service A",
 			"service":   "service-a",
-			"version":   version,
+			"version":   version, // ✅ controlled by deployment (v1/v2)
 			"service_b": serviceBResponse,
 		})
 	})
 
-	// 🔥 FIX: ADD THIS BLOCK
-	r.GET("/v2", func(c *gin.Context) {
-		resp, err := http.Get("http://service-b/api")
-
-		var serviceBResponse string
-
-		if err == nil {
-			body, _ := ioutil.ReadAll(resp.Body)
-			serviceBResponse = string(body)
-			resp.Body.Close()
-		} else {
-			serviceBResponse = "service-b not reachable"
-		}
-
-		c.JSON(200, gin.H{
-			"message":   "Hello from Service A (v2 route)",
-			"service":   "service-a",
-			"version":   "v2",
-			"service_b": serviceBResponse,
-		})
-	})
-
-	// Health checks
+	// ✅ Health check
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "healthy", "service": "service-a", "version": version})
+		c.JSON(200, gin.H{
+			"status":  "healthy",
+			"service": "service-a",
+			"version": version,
+		})
 	})
 
+	// ✅ Version endpoint
 	r.GET("/version", func(c *gin.Context) {
-		c.JSON(200, gin.H{"service": "service-a", "version": version})
+		c.JSON(200, gin.H{
+			"service": "service-a",
+			"version": version,
+		})
 	})
 
 	r.Run(":8080")
