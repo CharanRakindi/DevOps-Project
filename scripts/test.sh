@@ -21,18 +21,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$SCRIPT_DIR")/k8s"
 
 # ── Get Ingress IP and Port ───────────────────────────────────────────────────
-INGRESS_IP=$(kubectl get svc istio-ingressgateway -n istio-system \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
 
-if [ -z "$INGRESS_IP" ]; then
-  # Fallback: use NodePort
-  NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}')
-  INGRESS_PORT=$(kubectl get svc istio-ingressgateway -n istio-system \
-    -o jsonpath='{.spec.ports[?(@.name=="http2")].nodePort}')
-  BASE_URL="http://$NODE_IP:$INGRESS_PORT"
-else
-  BASE_URL="http://$INGRESS_IP"
+if [ -z "$NODE_IP" ]; then
+  NODE_IP=$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
 fi
+
+PORT=$(kubectl get svc istio-ingressgateway -n istio-system -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
+
+BASE_URL="http://$NODE_IP:$PORT"
 
 echo "========================================"
 echo " Base URL: $BASE_URL"
@@ -91,13 +88,13 @@ echo "  v2 responses from /v2: $V2_PATH_COUNT / 10  (expected 10)"
 # ── Test 3: service-a → service-b call ───────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " TEST 3: Internal Call (service-a → service-b)"
+echo " TEST 3: Internal Call (service-a → service-b via /api)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Sending 5 requests to /call-b..."
+echo "Sending 5 requests to /api..."
 
 SUCCESS_COUNT=0
 for i in $(seq 1 5); do
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/call-b" 2>/dev/null || echo "000")
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$BASE_URL/api" 2>/dev/null || echo "000")
   echo "  Request $i: HTTP $HTTP_CODE"
   [ "$HTTP_CODE" = "200" ] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
 done
@@ -122,13 +119,13 @@ echo "Applying fault injection..."
 kubectl apply -f "$K8S_DIR/06-fault-injection.yaml"
 sleep 3
 
-echo "Sending 20 requests to /call-b (expect delays and 503s)..."
+echo "Sending 20 requests to /api (expect delays and 503s)..."
 DELAY_COUNT=0
 ERROR_COUNT=0
 
 for i in $(seq 1 20); do
   START=$(date +%s%N)
-  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$BASE_URL/call-b" 2>/dev/null || echo "000")
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$BASE_URL/api" 2>/dev/null || echo "000")
   END=$(date +%s%N)
   DURATION_MS=$(( (END - START) / 1000000 ))
 
