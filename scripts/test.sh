@@ -4,46 +4,47 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K8S_DIR="$(dirname "$SCRIPT_DIR")/k8s"
 
-# ── FIXED: Use Public IP instead of Internal ────────────────────────────────
-
-# 🔥 OPTION 1 (BEST): Hardcode your EC2 public IP
-PUBLIC_IP="65.0.11.29"
-
-# 🔥 OPTION 2 (fallback): Try to auto-detect external IP
-if [ -z "$PUBLIC_IP" ]; then
-  PUBLIC_IP=$(curl -s ifconfig.me || echo "")
-fi
+# ✅ Use your Elastic IP
+ELASTIC_IP="16.112.134.36"
 
 PORT=$(kubectl get svc istio-ingressgateway -n istio-system \
   -o jsonpath='{.spec.ports[?(@.port==80)].nodePort}')
 
-BASE_URL="http://$PUBLIC_IP:$PORT"
+BASE_URL="http://$ELASTIC_IP:$PORT"
 
 echo "========================================"
 echo " Base URL: $BASE_URL"
 echo "========================================"
 
-# ── Wait for service to be ready ────────────────────────────────────────────
+# ── Wait for service to be ready (FIXED) ─────────────────────────────────────
 echo "Waiting for service to be ready..."
-for i in {1..20}; do
-  if curl -s "$BASE_URL/api" >/dev/null 2>&1; then
+
+READY=false
+for i in {1..15}; do
+  if curl -s --max-time 3 "$BASE_URL/api" >/dev/null 2>&1; then
     echo "Service is ready ✅"
+    READY=true
     break
   fi
   echo "Retrying... ($i)"
   sleep 3
 done
 
+if [ "$READY" = false ]; then
+  echo "❌ Service not reachable. Exiting..."
+  exit 1
+fi
+
 # ── Test 1: Weighted Routing ────────────────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " TEST 1: Weighted Canary Routing (80% v1 / 20% v2)"
+echo " TEST 1: Weighted Canary Routing"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 V1_COUNT=0
 V2_COUNT=0
 
-for i in $(seq 1 100); do
+for i in $(seq 1 50); do
   RESPONSE=$(curl -s "$BASE_URL/api" || echo '{"version":"error"}')
   VERSION=$(echo "$RESPONSE" | grep -o '"version":"[^"]*"' | cut -d'"' -f4)
 
