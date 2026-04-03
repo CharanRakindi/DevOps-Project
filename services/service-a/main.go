@@ -1,7 +1,7 @@
 package main
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"os"
 
@@ -16,16 +16,16 @@ func main() {
 
 	r := gin.Default()
 
-	// ✅ MAIN API (single source of truth)
+	// /api — single API endpoint; Istio routes /v2 here via URI rewrite
 	r.GET("/api", func(c *gin.Context) {
 		resp, err := http.Get("http://service-b/api")
 
 		var serviceBResponse string
 
 		if err == nil {
-			body, _ := ioutil.ReadAll(resp.Body)
+			defer resp.Body.Close()
+			body, _ := io.ReadAll(resp.Body)
 			serviceBResponse = string(body)
-			resp.Body.Close()
 		} else {
 			serviceBResponse = "service-b not reachable"
 		}
@@ -33,12 +33,12 @@ func main() {
 		c.JSON(200, gin.H{
 			"message":   "Hello from Service A",
 			"service":   "service-a",
-			"version":   version, // ✅ controlled by deployment (v1/v2)
+			"version":   version,
 			"service_b": serviceBResponse,
 		})
 	})
 
-	// ✅ Health check
+	// Health check for K8s probes
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "healthy",
@@ -47,7 +47,7 @@ func main() {
 		})
 	})
 
-	// ✅ Version endpoint
+	// Version endpoint
 	r.GET("/version", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"service": "service-a",

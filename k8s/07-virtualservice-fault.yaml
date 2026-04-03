@@ -1,0 +1,18 @@
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: service-b-fault
+  namespace: mesh-demo
+spec:
+  hosts:
+  - service-b
+  http:
+  - fault:
+      delay:
+        percentage:
+          value: 50.0
+        fixedDelay: 2s
+    route:
+    - destination:
+        host: service-b
+        subset: v1

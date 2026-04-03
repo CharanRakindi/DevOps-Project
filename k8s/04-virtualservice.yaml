@@ -8,19 +8,21 @@ spec:
   - "*"
   gateways:
   - mesh-gateway
-
   http:
 
-  # 🔥 RULE 1 — MUST BE FIRST
+  # RULE 1: /v2 → rewrite to /api and route to v2 subset only
   - match:
     - uri:
         prefix: "/v2"
+    rewrite:
+      uri: "/api"
     route:
     - destination:
         host: service-a
         subset: v2
+      weight: 100
 
-  # 🔥 RULE 2 — DEFAULT
+  # RULE 2: default weighted canary (80% v1 / 20% v2)
   - route:
     - destination:
         host: service-a

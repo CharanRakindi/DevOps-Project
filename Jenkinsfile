@@ -58,7 +58,6 @@ pipeline {
         ]) {
           sh '''
             export KUBECONFIG="$KUBECONFIG_FILE"
-            export ELASTIC_IP=${ELASTIC_IP}
             chmod +x scripts/test.sh
             ./scripts/test.sh
           '''
