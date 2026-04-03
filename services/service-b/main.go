@@ -1,17 +1,12 @@
 package main
 
 import (
-	"embed"
-	"html/template"
 	"net/http"
 	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
-
-//go:embed templates/*.html
-var templateFS embed.FS
 
 func main() {
 	version := os.Getenv("APP_VERSION")
@@ -21,14 +16,12 @@ func main() {
 
 	r := gin.Default()
 
-	// Parse embedded templates
-	tmpl := template.Must(template.ParseFS(templateFS, "templates/*.html"))
-	r.SetHTMLTemplate(tmpl)
-
-	// Dashboard — serves the modern UI at root
+	// Root route to return an API message
 	r.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "dashboard.html", gin.H{
-			"Version": version,
+		c.JSON(http.StatusOK, gin.H{
+			"service": "service-b",
+			"version": version,
+			"message": "API-only backend. Use /api, /health, or /version.",
 		})
 	})
 
