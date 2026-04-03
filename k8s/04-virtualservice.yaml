@@ -18,8 +18,6 @@ spec:
     match:
     - uri:
         prefix: "/v2"
-    rewrite:
-      uri: "/"
     route:
     - destination:
         host: service-a
