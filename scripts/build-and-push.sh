@@ -5,22 +5,21 @@
 #
 # Usage:
 #   chmod +x scripts/build-and-push.sh
-#   ./scripts/build-and-push.sh <YOUR_DOCKERHUB_USERNAME>
-#
-# Example:
-#   ./scripts/build-and-push.sh johndoe
+#   ./scripts/build-and-push.sh <DOCKERHUB_USERNAME> <DOCKERHUB_PASSWORD>
 # ══════════════════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
 # ── Validate input ────────────────────────────────────────────────────────────
-if [ -z "${1:-}" ]; then
-  echo "ERROR: Docker Hub username is required."
-  echo "Usage: $0 <dockerhub-username>"
+if [ -z "${1:-}" ] || [ -z "${2:-}" ]; then
+  echo "ERROR: Docker Hub username and password are required."
+  echo "Usage: $0 <dockerhub-username> <dockerhub-password>"
   exit 1
 fi
 
 DOCKERHUB_USER="$1"
+DOCKERHUB_PASS="$2"
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
@@ -29,10 +28,10 @@ echo " Docker Hub User : $DOCKERHUB_USER"
 echo " Project Root    : $PROJECT_ROOT"
 echo "========================================"
 
-# ── Login to Docker Hub ───────────────────────────────────────────────────────
+# ── Login to Docker Hub (NON-INTERACTIVE) ─────────────────────────────────────
 echo ""
 echo "[1/5] Logging in to Docker Hub..."
-docker login -u "$DOCKERHUB_USER"
+echo "$DOCKERHUB_PASS" | docker login -u "$DOCKERHUB_USER" --password-stdin
 
 # ── Build service-a v1 ───────────────────────────────────────────────────────
 echo ""
@@ -80,4 +79,5 @@ echo "   $DOCKERHUB_USER/service-b:v1"
 echo ""
 echo " Next step:"
 echo "   Run: ./scripts/deploy.sh $DOCKERHUB_USER"
+echo "========================================"
 echo "========================================"
