@@ -1,6 +1,6 @@
 # Istio Service Mesh — Microservices on Kubernetes
 
-A complete, production-ready implementation of an **Istio service mesh** on a self-managed Kubernetes cluster, featuring two Go microservices with automated CI/CD, canary deployments, mutual TLS, circuit breaking, fault injection, and a real-time web dashboard for mesh visualization.
+A complete, production-ready implementation of an **Istio service mesh** on a self-managed Kubernetes cluster, featuring two Go API microservices with automated CI/CD, canary deployments, mutual TLS, circuit breaking, and fault injection.
 
 > **POC #35 — Advanced DevOps Implementation**
 
@@ -37,7 +37,7 @@ A complete, production-ready implementation of an **Istio service mesh** on a se
 
 This project deploys two Go microservices (`service-a` and `service-b`) onto a self-managed Kubernetes cluster (kubeadm on AWS EC2) with Istio as the service mesh layer. The application itself is intentionally minimal — the real deliverable is the **infrastructure around it**: traffic splitting, encrypted service-to-service communication, automated resilience, and a fully automated Jenkins pipeline.
 
-A custom-built, dark-themed web dashboard provides real-time visualization of the mesh topology, service health, and live API responses.
+A custom Kiali dashboard setup provides real-time visualization of the mesh topology and service health.
 
 ### What This Project Demonstrates
 
@@ -48,7 +48,7 @@ A custom-built, dark-themed web dashboard provides real-time visualization of th
 | Circuit Breaking | Automatic ejection of unhealthy pods |
 | Chaos Engineering | Inject 5s delays and HTTP 503s without code changes |
 | Automated CI/CD | Jenkins pipeline: build → push → deploy → test |
-| Observability | Kiali service graph + custom real-time dashboard |
+| Observability | Kiali service graph observability |
 
 ---
 
@@ -106,7 +106,6 @@ Every pod runs **2/2 containers**: the application container and an automaticall
 
 ### Observability
 - **Kiali** — Live service graph with traffic flow, error rates, and mTLS status
-- **Custom Dashboard** — Dark-themed web UI with real-time health polling and architecture visualization
 
 ---
 
@@ -122,7 +121,6 @@ Every pod runs **2/2 containers**: the application container and an automaticall
 | CI/CD | Jenkins (Declarative Pipeline) |
 | Registry | Docker Hub |
 | Observability | Kiali + Prometheus + Jaeger |
-| Frontend | Vanilla HTML/CSS/JS (embedded in Go binary) |
 
 ---
 
@@ -151,20 +149,16 @@ DevOps-Project/
 │   └── test.sh                      #   Automated mesh verification tests
 │
 └── services/                        # Go Microservices
-    ├── service-a/                   #   Frontend Gateway Service
+    ├── service-a/                   #   API Gateway Service
     │   ├── main.go                  #     HTTP server (standard library)
     │   ├── Dockerfile               #     Multi-stage build
     │   ├── go.mod                   #     Module definition (zero deps)
-    │   ├── static/
-    │   │   └── index.html           #     Dashboard UI
     │   └── .dockerignore
     │
     └── service-b/                   #   Internal Backend Service
         ├── main.go                  #     HTTP server
         ├── Dockerfile               #     Multi-stage build
         ├── go.mod / go.sum
-        ├── templates/
-        │   └── dashboard.html       #     Service-B status page
         └── .dockerignore
 ```
 
@@ -240,14 +234,14 @@ chmod +x scripts/test.sh
 
 ## Microservices
 
-### Service A — Frontend Gateway
+### Service A — API Gateway
 
-The primary user-facing service. Serves the dashboard UI and acts as an API gateway.
+The primary user-facing service that acts as an API gateway.
 
 | Endpoint | Method | Response |
 |---|---|---|
-| `/` | GET | Dashboard HTML UI |
-| `/api` | GET | `{"service":"service-a", "version":"v1", "message":"Hello from Service A", "timestamp":"..."}` |
+| `/` | GET | API-only message |
+| `/api` | GET | `{"service":"service-a", "version":"v1", "message":"...}` |
 | `/health` | GET | `{"status":"healthy", "service":"service-a", "version":"v1"}` |
 | `/version` | GET | `{"service":"service-a", "version":"v1"}` |
 | `/call-b` | GET | Proxied JSON response from Service B (via K8s DNS) |
@@ -255,8 +249,7 @@ The primary user-facing service. Serves the dashboard UI and acts as an API gate
 **Implementation details:**
 - Written in Go using only the standard library (`net/http`, `encoding/json`)
 - Zero external dependencies — no frameworks
-- Uses `http.FileServer` to serve `static/index.html` at the root path
-- `http.ServeMux` matches API routes (`/api`, `/health`, etc.) before the static fallback (`/`)
+- `http.ServeMux` matches API routes (`/api`, `/health`, etc.)
 - Reuses a single `http.Client` for `/call-b` to enable connection pooling
 - Runs on port 8080 inside the container
 
@@ -270,7 +263,7 @@ Internal backend service consumed by Service A via Kubernetes cluster DNS.
 
 | Endpoint | Method | Response |
 |---|---|---|
-| `/` | GET | Service B status page (HTML) |
+| `/` | GET | API backend message |
 | `/api` | GET | `{"service":"service-b", "version":"v1", "message":"Hello from Service B"}` |
 | `/health` | GET | `{"status":"healthy", "service":"service-b", "version":"v1"}` |
 
@@ -397,22 +390,6 @@ Kiali provides a live service graph showing:
 
 ---
 
-## Dashboard UI
-
-The custom-built dashboard is served at the root path (`/`) of Service A and provides:
-
-| Section | Description |
-|---|---|
-| **Navigation Bar** | Live status indicators for Kubernetes, Istio, and mTLS connectivity |
-| **Service Cards** | Health status, replica count, traffic weight, and port for each service |
-| **Architecture Flow** | Animated visualization of traffic flow from Ingress → Service A → Service B |
-| **Mesh Configuration** | mTLS mode, traffic split ratio, circuit breaker status, total pod count |
-| **Istio Capabilities** | Cards explaining Traffic Management, mTLS, Fault Injection, Circuit Breaking |
-| **Live Responses** | Tabbed panel polling `/api`, `/health`, `/version`, and `/call-b` in real time |
-
-**Design:** Dark theme, glassmorphism, Inter + JetBrains Mono fonts, purple/cyan gradient accents, smooth CSS animations.
-
----
 
 ## Testing
 
@@ -484,9 +461,6 @@ Istio sidecar injection may not be working. Verify the namespace label:
 kubectl get namespace mesh-demo --show-labels
 # Should include: istio-injection=enabled
 ```
-
-### Dashboard shows "Unreachable"
-You are accessing the HTML file directly (`file:///...`). The dashboard only works when served through the Go backend inside the cluster. Access via `http://<NODE_IP>:<NODEPORT>/`.
 
 ### `/api` returns 404
 The pods may be running a stale image. Force a restart:
