@@ -7,9 +7,9 @@ spec:
   hosts:
   - "*"
   gateways:
-  - mesh-gateway
-  http:
+  - mesh-gateway   # ✅ ONLY THIS
 
+  http:
   - match:
     - uri:
         prefix: "/v2"
