@@ -11,7 +11,7 @@ spec:
 
   http:
 
-  # 🔹 /v2 → v2
+  # 🔥 RULE 1 (TOP PRIORITY)
   - match:
     - uri:
         prefix: "/v2"
@@ -22,7 +22,7 @@ spec:
         host: service-a
         subset: v2
 
-  # 🔹 default → weighted split
+  # 🔥 RULE 2 (DEFAULT)
   - match:
     - uri:
         prefix: "/"
