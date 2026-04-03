@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: service-a
-        image: ${DOCKERHUB_USER}/service-a:latest
+        image: charanseven/service-a:latest
         ports:
         - containerPort: 8080
         env:
