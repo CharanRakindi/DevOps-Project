@@ -16,8 +16,8 @@ func main() {
 
 	r := gin.Default()
 
+	// ✅ MAIN API
 	r.GET("/api", func(c *gin.Context) {
-		// 🔥 CALL SERVICE-B
 		resp, err := http.Get("http://service-b/api")
 
 		var serviceBResponse string
@@ -30,7 +30,6 @@ func main() {
 			serviceBResponse = "service-b not reachable"
 		}
 
-		// FINAL RESPONSE
 		c.JSON(200, gin.H{
 			"message":   "Hello from Service A",
 			"service":   "service-a",
@@ -39,7 +38,29 @@ func main() {
 		})
 	})
 
-	// Required K8s probes
+	// 🔥 FIX: ADD THIS BLOCK
+	r.GET("/v2", func(c *gin.Context) {
+		resp, err := http.Get("http://service-b/api")
+
+		var serviceBResponse string
+
+		if err == nil {
+			body, _ := ioutil.ReadAll(resp.Body)
+			serviceBResponse = string(body)
+			resp.Body.Close()
+		} else {
+			serviceBResponse = "service-b not reachable"
+		}
+
+		c.JSON(200, gin.H{
+			"message":   "Hello from Service A (v2 route)",
+			"service":   "service-a",
+			"version":   "v2",
+			"service_b": serviceBResponse,
+		})
+	})
+
+	// Health checks
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy", "service": "service-a", "version": version})
 	})
