@@ -5,9 +5,9 @@ metadata:
   namespace: mesh-demo
 spec:
   hosts:
-  - "*"
+  - service-a
   gateways:
-  - mesh-gateway   # ✅ ONLY THIS
+  - mesh-gateway
 
   http:
   - match:
