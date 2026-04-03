@@ -1,10 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-ELASTIC_IP=${ELASTIC_IP:-""}
+# ========================================
+# Auto-detect node IP if ELASTIC_IP not set
+# ========================================
+ELASTIC_IP=${ELASTIC_IP:-$(kubectl get node -o jsonpath='{.items[0].status.addresses[0].address}')}
 
 if [ -z "$ELASTIC_IP" ]; then
-  echo "❌ ELASTIC_IP not set"
+  echo "❌ Could not determine node IP"
   exit 1
 fi
 
@@ -44,7 +47,7 @@ done
 echo "v1: $v1 | v2: $v2"
 
 # ========================================
-# TEST 2: /v2 Routing (FIXED)
+# TEST 2: /v2 Routing
 # ========================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -123,4 +126,3 @@ kubectl delete -f k8s/07-virtualservice-fault.yaml
 echo ""
 echo "========================================"
 echo " All tests complete ✅"
-echo "========================================"
